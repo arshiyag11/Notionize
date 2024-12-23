@@ -169,3 +169,5 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+config/.env
+dashboard-f0885-firebase-adminsdk-jw47c-a5c0a412cc.json
