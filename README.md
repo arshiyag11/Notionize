@@ -58,9 +58,10 @@ pip install -r requirements.txt
 
 Configure the following settings in the main Python script (`config.py` or directly within the script):
 
-- **NOTION_TOKEN**: Your Notion API key.
+- **API_KEY**: Your notion API key
 - **DATABASE_ID**: The ID of your Notion database.
 - **DISCORD_TOKEN**: Your Discord bot token.
+- **DISCORD_WEBHOOK_URL**: Your discord webhook url.
 - **GOOGLE_CREDENTIALS**: Path to your `credentials.json` file.
 
 NOTE: use these as environment variables.
@@ -69,9 +70,13 @@ NOTE: use these as environment variables.
 
 Ensure that your **Notion database** is structured appropriately with columns such as:
 
-- **Task Name**
-- **Due Date**
-- **Status**
+- **Name**
+- **Course**
+- **Start Date**
+- **End Date**
+- **Complete**
+- **Grade**
+- **Weightage**
   
 Once your database is set up, **share the database with the Notion integration** to enable synchronization.
 
@@ -88,12 +93,14 @@ python main.py
 
 Once the bot is running, you can use the ```!menu``` command to see all other useful commands. 
 
+---
 
 ### Limitations
 
 Platform Limitations: Currently, Canvas and PrairieLearn assignments cannot be fetched due to API integration complexities.
 Stability: The project is in its initial development stage, so you may encounter occasional bugs or issues.
 
+---
 
 ### Future Development
 Integration with other popular student platforms like Canvas, PrairieLearn, and Gradescope.
@@ -101,11 +108,12 @@ Improved error handling and stability.
 Expanded functionality for the Discord bot (e.g., notifications, reminders).
 Support for more calendar services and task management platforms.
 
+---
 
 ### Support and Contributions
 This project is open for suggestions and improvements! If you have feedback, ideas, or want to contribute, feel free to submit issues or pull requests on the GitHub repository.
 For any questions or inquiries, contact: arshiya5@illinois.edu
 
-
+---
 ### License
 This project is licensed under the MIT License – see the LICENSE file for details.
