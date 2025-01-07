@@ -16,7 +16,7 @@ class NotionClient:
             "properties": {
                 "Assignment": {"title": [{"text": {"content": assignment_data['assignment']}}]},
                 "Course": {"multi_select": [{"name": assignment_data['course']}]},
-                "Due Date": {"multi_select": [{"name": assignment_data['due_date']}]},
+                "date": {"multi_select": [{"name": assignment_data['due_date']}]},
                 "Complete": {"status": {"name": assignment_data['status']}},
                 "Grade": {"number": assignment_data['grade']},
                 "Weightage": {"number": assignment_data['weightage']}
