@@ -94,10 +94,7 @@ class AssignmentTracker:
                     continue
                 else:
                     for week in range(repeat_weeks):
-                        # Modify assignment name for repeated entries
                         current_assignment = f"{assignment}{week+1}" if repeat_weeks > 1 else assignment
-                        
-                        # Calculate new dates for repeated assignments
                         current_start_date = (datetime.strptime(start_date, "%Y-%m-%d %H:%M:%S") + timedelta(weeks=week)).strftime("%Y-%m-%d %H:%M:%S")
                         current_end_date = (datetime.strptime(end_date, "%Y-%m-%d %H:%M:%S") + timedelta(weeks=week)).strftime("%Y-%m-%d %H:%M:%S")
                         payload = self.generate_payload(current_assignment, course, current_start_date, current_end_date, cp, grade, weightage)
@@ -123,11 +120,7 @@ class AssignmentTracker:
         self.assignments = []
         for page in query['results']:
             assignment = page['properties']['Name']['title'][0]['text']['content']
-            
-            # Convert course (multi_select) to a tuple to make it hashable
             course = tuple([c['name'] for c in page['properties']['Course']['multi_select']])
-            
-            # Extract actual date strings from the 'start' key in the date dictionary
             start_date = page['properties']['Start Date']['date']['start'] if 'Start Date' in page['properties'] else None
             end_date = page['properties']['End Date']['date']['start'] if 'End Date' in page['properties'] else None
             
@@ -146,8 +139,6 @@ class AssignmentTracker:
             }
             
             self.assignments.append(assignment_json)
-            
-            # Now add the tuple with start_date and end_date as strings, which are hashable
             self.assignments_in_database.add((assignment, course, end_date))
 
     def setup_google_calendar(self):
