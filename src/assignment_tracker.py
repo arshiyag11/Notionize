@@ -8,7 +8,6 @@ import dotenv
 from notion_client import Client
 import discord
 from datetime import datetime, timedelta
-from utils.date_utils import parse_date
 
 COURSE_COLORS = {
     "CS598": discord.Color.blue(),
@@ -35,6 +34,7 @@ class AssignmentTracker:
         self.database_id = os.getenv("DATABASE_ID")
         self.discord_webhook_url = os.getenv("DISCORD_WEBHOOK_URL")
         self.assignments = []
+        self.assignments_in_database = set()
 
     def generate_payload(self, assignment, course, start_date, end_date, cp, grade, weightage):
         valid_statuses = {
@@ -69,13 +69,14 @@ class AssignmentTracker:
         except Exception as e:
             print(f"Error sending Discord notification: {str(e)}")
 
-
     def read_csv(self, filepath):
         url = 'https://api.notion.com/v1/pages'
         responses = []
+        
         with open(filepath, mode='r', newline='') as file:
             csv_reader = csv.reader(file)
             next(csv_reader)
+            
             for row in csv_reader:
                 assignment = row[0].strip()
                 course = row[1].strip()
@@ -87,93 +88,67 @@ class AssignmentTracker:
                 repeat_assignment = row[7].strip()
                 repeat_weeks = int(row[8].strip()) if repeat_assignment.lower() == 'yes' else 1
 
-                # Check if the assignment already exists in the database
-                existing_assignments = self.notion.databases.query(
-                    database_id=self.database_id,
-                    filter={
-                        "and": [
-                            {"property": "Name", "title": {"equals": assignment}},
-                            {"property": "Course", "multi_select": {"contains": course}},
-                            {"property": "End Date", "date": {"equals": end_date}}
-                        ]
-                    }
-                ).get("results")
-
-                # Handle repeat assignments
-                if repeat_assignment.lower() == 'yes':
-                    repeated_assignments = self.generate_repeating_assignments(
-                        assignment, course, start_date, end_date, weightage, repeat_weeks)
-                    
-                    for repeated_assignment in repeated_assignments:
-                        # Check if the repeated assignment already exists (no duplicates)
-                        repeated_existing = self.notion.databases.query(
-                            database_id=self.database_id,
-                            filter={
-                                "and": [
-                                    {"property": "Name", "title": {"equals": repeated_assignment['Assignment Name']}},
-                                    {"property": "Course", "multi_select": {"contains": repeated_assignment['Course']}},
-                                    {"property": "End Date", "date": {"equals": repeated_assignment['End Date']}}
-                                ]
-                            }
-                        ).get("results")
-
-                        if not repeated_existing:
-                            payload = self.generate_payload(
-                                repeated_assignment['Assignment Name'], 
-                                repeated_assignment['Course'],
-                                repeated_assignment['Start Date'],
-                                repeated_assignment['End Date'],
-                                cp,
-                                grade,
-                                weightage
-                            )
-                            try:
-                                response = requests.post(url, headers=self.headers, data=json.dumps(payload))
-                                responses.append(response.status_code)
-                                if response.status_code == 200:
-                                    print(f'{repeated_assignment["Assignment Name"]} successfully uploaded to Notion')
-                                    self.send_discord_notification(
-                                        f"Assignment Uploaded: {repeated_assignment['Assignment Name']} - {repeated_assignment['Course']}, Date: {repeated_assignment['End Date']}, Grade: {grade}, Weightage: {weightage}"
-                                    )
-                                else:
-                                    print("Error:", response.status_code, response.text)
-                            except Exception as e:
-                                print(f"Exception occurred while uploading row: {str(e)}")
-                        else:
-                            print(f"Skipping duplicate entry: {repeated_assignment['Assignment Name']} - {repeated_assignment['Course']}, Date: {repeated_assignment['End Date']}")
-                elif not existing_assignments:
-                    payload = self.generate_payload(assignment, course, start_date, end_date, cp, grade, weightage)
-                    try:
-                        response = requests.post(url, headers=self.headers, data=json.dumps(payload))
-                        responses.append(response.status_code)
-                        if response.status_code == 200:
-                            print(f'{assignment} successfully uploaded to Notion')
-                            self.send_discord_notification(
-                                f"Assignment Uploaded: {assignment} - {course}, Date: {end_date}, Grade: {grade}, Weightage: {weightage}"
-                            )
-                        else:
-                            print("Error:", response.status_code, response.text)
-                    except Exception as e:
-                        print(f"Exception occurred while uploading row: {str(e)}")
+                self.fetch_assignments_from_notion()
+                if (assignment, course, end_date) in self.assignments_in_database:
+                    print(f'Duplicate assignment!')
+                    continue
                 else:
-                    print(f"Skipping duplicate entry: {assignment} - {course}, Date: {end_date}")
+                    for week in range(repeat_weeks):
+                        # Modify assignment name for repeated entries
+                        current_assignment = f"{assignment}{week+1}" if repeat_weeks > 1 else assignment
+                        
+                        # Calculate new dates for repeated assignments
+                        current_start_date = (datetime.strptime(start_date, "%Y-%m-%d %H:%M:%S") + timedelta(weeks=week)).strftime("%Y-%m-%d %H:%M:%S")
+                        current_end_date = (datetime.strptime(end_date, "%Y-%m-%d %H:%M:%S") + timedelta(weeks=week)).strftime("%Y-%m-%d %H:%M:%S")
+                        payload = self.generate_payload(current_assignment, course, current_start_date, current_end_date, cp, grade, weightage)
+                        try:
+                            response = requests.post(url, headers=self.headers, data=json.dumps(payload))
+                            responses.append(response.status_code)
+                            if response.status_code == 200:
+                                print(f'{current_assignment} successfully uploaded to Notion')
+                                self.send_discord_notification(
+                                    f"Assignment Uploaded: {current_assignment} - {course}, Date: {current_end_date}, Grade: {grade}, Weightage: {weightage}"
+                                )
+                            else:
+                                print("Error:", response.status_code, response.text)
+                        except Exception as e:
+                            print(f"Exception occurred while uploading row: {str(e)}")
+
         return responses
-    
+
+
     def fetch_assignments_from_notion(self):
-        query = self.notion.databases.query(database_id=self.database_id)
+        response = self.notion.databases.query(database_id=self.database_id)
+        query = response.json()
         self.assignments = []
         for page in query['results']:
-            assignment = {
-                'assignment': page['properties']['Name']['title'][0]['text']['content'],
-                'course': page['properties']['Course']['multi_select'],
-                'start date': page['properties']['Start Date']['date'],
-                'due date': page['properties']['End Date']['date'],
-                'complete': page['properties']['Complete']['status']['name'],
-                'grade': page['properties']['Grade']['number'] if 'Grade' in page['properties'] and page['properties']['Grade']['number'] is not None else None,
-                'weightage': page['properties']['Weightage']['number'] if 'Weightage' in page['properties'] and page['properties']['Weightage']['number'] is not None else None
+            assignment = page['properties']['Name']['title'][0]['text']['content']
+            
+            # Convert course (multi_select) to a tuple to make it hashable
+            course = tuple([c['name'] for c in page['properties']['Course']['multi_select']])
+            
+            # Extract actual date strings from the 'start' key in the date dictionary
+            start_date = page['properties']['Start Date']['date']['start'] if 'Start Date' in page['properties'] else None
+            end_date = page['properties']['End Date']['date']['start'] if 'End Date' in page['properties'] else None
+            
+            complete = page['properties']['Complete']['status']['name']
+            grade = page['properties']['Grade']['number'] if 'Grade' in page['properties'] and page['properties']['Grade']['number'] is not None else None
+            weightage = page['properties']['Weightage']['number'] if 'Weightage' in page['properties'] and page['properties']['Weightage']['number'] is not None else None
+            
+            assignment_json = {
+                'assignment': assignment,
+                'course': course,
+                'start date': start_date,
+                'due date': end_date,
+                'complete': complete,
+                'grade': grade,
+                'weightage': weightage
             }
-            self.assignments.append(assignment)
-
+            
+            self.assignments.append(assignment_json)
+            
+            # Now add the tuple with start_date and end_date as strings, which are hashable
+            self.assignments_in_database.add((assignment, course, end_date))
 
     def setup_google_calendar(self):
         SCOPES = ['https://www.googleapis.com/auth/calendar']
@@ -223,8 +198,6 @@ class AssignmentTracker:
             print(f"Event already exists: {assignment['assignment']}")
 
 
-    
-
     def generate_repeating_assignments(self, assignment_name, course, start_date, end_date, weightage, repeat_weeks):
         """
         Generate multiple assignments for repeated weeks but do not include 'Repeat Assignment' or 'Repeat Weeks' in the payload.
@@ -268,4 +241,4 @@ class AssignmentTracker:
     def get_due_this_week(self):
         start_of_week = datetime.now().date() - timedelta(days=datetime.now().weekday())
         end_of_week = start_of_week + timedelta(days=6)
-        return [a for a in self.assignments if start_of_week <= parse_date(a['due date']['start']) <= end_of_week]
+        return [a for a in self.assignments if start_of_week <= self.parse_date(a['due date']['start']) <= end_of_week]
