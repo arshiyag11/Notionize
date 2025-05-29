@@ -33,43 +33,12 @@ def authenticate_google_account():
     return build('calendar', 'v3', credentials=creds)
 
 
-# def add_to_google_calendar(assignment):
-#     service = authenticate_google_account()
-#     now = datetime.now()
-#     local_now = now.astimezone()
-#     local_tz = local_now.tzinfo
-#     local_tzname = local_tz.tzname(local_now)
-#     # print(local_tzname)
-#     # Time Zones
-#     # start_date = datetime.fromisoformat(assignment['start date']['start']).replace(tzinfo=timezone.utc).isoformat()
-#     # end_date = datetime.fromisoformat(assignment['due date']['start']).replace(tzinfo=timezone.utc).isoformat()
-#     start_date = datetime.datetime.fromisoformat(assignment['start date']['start']).astimezone(local_tzname).isoformat()
-#     end_date = datetime.datetime.fromisoformat(assignment['due date']['start']).astimezone(local_tzname).isoformat()
-
-#     event = {
-#         'summary': f"{assignment['assignment']} - {assignment['course'][0]['name']}",
-#         'description': f"Grade: {assignment['grade']}, Weightage: {assignment['weightage']}",
-#         'start': {
-#             'dateTime': start_date,
-#             'timeZone': str(local_tzname),
-#         },
-#         'end': {
-#             'dateTime': end_date,
-#             'timeZone': str(local_tzname),
-#         },
-#     }
-
-#     try:
-#         event = service.events().insert(calendarId='primary', body=event).execute()
-#         print(f"Event created: {event.get('htmlLink')}")
-#     except Exception as e:
-#         print(f"An error occurred: {e}")
-
-
-# ADAPT TO SYSTEM TIMEZONE
 def add_to_google_calendar(assignment):
     service = authenticate_google_account()
-    local_tz = ZoneInfo.from_system()
+
+    # Use your local timezone explicitly here:
+    local_tz_name = "America/Los_Angeles"  
+    local_tz = ZoneInfo(local_tz_name)
     
     start_date = datetime.fromisoformat(assignment['start date']['start']).replace(tzinfo=timezone.utc).astimezone(local_tz)
     end_date = datetime.fromisoformat(assignment['due date']['start']).replace(tzinfo=timezone.utc).astimezone(local_tz)
@@ -79,11 +48,11 @@ def add_to_google_calendar(assignment):
         'description': f"Grade: {assignment['grade']}, Weightage: {assignment['weightage']}",
         'start': {
             'dateTime': start_date.isoformat(),
-            'timeZone': str(local_tz),
+            'timeZone': local_tz_name,
         },
         'end': {
             'dateTime': end_date.isoformat(),
-            'timeZone': str(local_tz),
+            'timeZone': local_tz_name,
         },
     }
 
@@ -92,7 +61,6 @@ def add_to_google_calendar(assignment):
         print(f"Event created: {event.get('htmlLink')}")
     except Exception as e:
         print(f"An error occurred: {e}")
-
 
 
 def format_date(date_str):
@@ -128,6 +96,7 @@ async def menu(ctx):
     embed.add_field(name="!course_grade <course>", value="Displays grades for a course, including assignments, weightages, and final score", inline=False)
     embed.add_field(name="!weekly_todo", value="Displays a weekly to-do list of assignments grouped by day", inline=False)
     embed.add_field(name="!upload_csv", value="Uploads assignments from a CSV file to Notion database", inline=False)
+    embed.add_field(name="!sync_calendar", value="Syncs Notion assignments with Google Calendar", inline=False)
     embed.add_field(name="!shutdown", value="Shuts down the bot (owner-only)", inline=False)
     await ctx.send(embed=embed)
 
@@ -352,12 +321,13 @@ async def course_grade(ctx, *, course):
                     value=f"Grade: {grade}%\nWeightage: {weightage}%\nReflected Score: {reflected_score:.2f}",
                     inline=False
                 )
-        
+
         if total_weightage > 0:
-            final_score = (total_score / total_weightage)
-            embed.add_field(name="Final Score", value=f"{final_score:.2f}%", inline=False)
+            final_score = total_score
+            embed.add_field(name="Final Score (out of overall course grade)", value=f"{final_score:.2f}%", inline=False)
         else:
             embed.add_field(name="Final Score", value="N/A (No graded assignments)", inline=False)
+
         
         await ctx.send(embed=embed)
     else:
@@ -377,4 +347,3 @@ async def sync_calendar(ctx):
 
 def run_bot(token):
     bot.run(token)
-
